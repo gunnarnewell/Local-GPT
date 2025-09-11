@@ -1,0 +1,23 @@
+:root { color-scheme: light dark; font-family: system-ui, Segoe UI, Roboto, sans-serif; }
+body { margin: 0; }
+.app { display: grid; grid-template-columns: 260px 1fr; height: 100vh; }
+.sidebar { background: #1114; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.sidebar h1 { font-size: 18px; margin: 6px 0; }
+.sidebar nav { display: grid; gap: 6px; }
+.sidebar button { padding: 8px; border-radius: 6px; border: 1px solid #9993; background: transparent; cursor: pointer; }
+.sidebar button.active { background: #0a84ff33; border-color: #0a84ff88; }
+.sidebar .status { margin-top: auto; font-size: 12px; opacity: 0.8; }
+
+.panel { padding: 16px 20px; height: 100%; overflow: auto; }
+.toolbar { display: flex; gap: 16px; align-items: center; margin-bottom: 10px; }
+.chat { display: grid; gap: 8px; margin: 10px 0; }
+.bubble { padding: 10px 12px; border-radius: 10px; max-width: 70ch; }
+.bubble.user { background: #0a84ff22; justify-self: end; }
+.bubble.assistant { background: #8882; }
+.inputRow { display: grid; grid-template-columns: 1fr auto; gap: 8px; position: sticky; bottom: 0; background: color-mix(in srgb, Canvas, transparent 20%); padding-top: 8px; }
+.inputRow textarea { min-height: 52px; resize: vertical; }
+.inputRow button { padding: 10px 14px; }
+
+.citations { border-top: 1px solid #9993; padding-top: 8px; margin-top: 8px; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+.progress { max-height: 220px; overflow: auto; }

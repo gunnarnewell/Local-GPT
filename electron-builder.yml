@@ -1,0 +1,39 @@
+appId: com.localassistant.app
+productName: Local Assistant
+files:
+  - dist/**/*
+  - app/renderer/dist/**/*
+  - assets/prompts/instructions.md
+  - model_manifest.json
+extraResources:
+  - from: runtime/llama/${os}
+    to: runtime/llama
+    filter:
+      - "llama-server*"
+  - from: LICENSES
+    to: LICENSES
+mac:
+  target:
+    - dmg
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  category: public.app-category.productivity
+win:
+  target:
+    - nsis
+  legalTrademarks: ""
+  publisherName: "You"
+  artifactName: "${productName}-Setup-${version}.exe"
+linux:
+  target:
+    - AppImage
+  category: Utility
+directories:
+  output: release
+  buildResources: build
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: false
+publish: null
