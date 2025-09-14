@@ -16,7 +16,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "dist": "npm run build && electron-builder -c electron-builder.yml",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "llama:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-llama-server.ps1 -Backend cpu",
+    "llama:build:cuda": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-llama-server.ps1 -Backend cublas",
+    "llama:build:metal": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-llama-server.ps1 -Backend metal"
   },
   "devDependencies": {
     "@types/node": "^22.7.4",
