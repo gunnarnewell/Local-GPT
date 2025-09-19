@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "rootDir": ".",
-    "outDir": "../dist/main"
-  },
-  "include": ["main/**/*.ts", "main/**/*.tsx", "shared/**/*.ts"],
-  "exclude": ["main/tests/**"]
-}
