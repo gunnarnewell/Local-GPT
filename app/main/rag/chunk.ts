@@ -1,36 +1,35 @@
+import fs from 'fs';
 import path from 'path';
-import { getDataDirs } from '../modelManager';
-import Database from 'better-sqlite3';
+import pdfParse from 'pdf-parse';
 
-let db: Database.Database | null = null;
+function chunkText(text: string, maxChars = 1200, overlap = 100): string[] {
+  const chunks: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const end = Math.min(i + maxChars, text.length);
+    const slice = text.slice(i, end);
+    chunks.push(slice.trim());
+    if (end === text.length) break;
+    i = end - overlap;
+    if (i < 0) i = 0;
+  }
+  return chunks.filter(c => c.length > 0);
+}
 
-export function getDB() {
-  if (db) return db;
-  const { indexDir } = getDataDirs();
-  const file = path.join(indexDir, 'index.sqlite');
-  db = new Database(file);
-  db.pragma('journal_mode = wal');
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS documents(
-      id TEXT PRIMARY KEY,
-      path TEXT NOT NULL,
-      title TEXT,
-      mtime INTEGER
-    );
-    CREATE TABLE IF NOT EXISTS chunks(
-      id TEXT PRIMARY KEY,
-      doc_id TEXT NOT NULL,
-      chunk_index INTEGER,
-      text TEXT,
-      FOREIGN KEY(doc_id) REFERENCES documents(id) ON DELETE CASCADE
-    );
-    CREATE TABLE IF NOT EXISTS embeddings(
-      id TEXT PRIMARY KEY,
-      chunk_id TEXT NOT NULL,
-      vector BLOB NOT NULL,
-      FOREIGN KEY(chunk_id) REFERENCES chunks(id) ON DELETE CASCADE
-    );
-    CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(doc_id);
-  `);
-  return db;
+async function readFileAsText(p: string): Promise<{ title: string; text: string }>{
+  const ext = path.extname(p).toLowerCase();
+  const base = path.basename(p);
+  if (ext === '.pdf') {
+    const buf = fs.readFileSync(p);
+    const out = await pdfParse(buf);
+    return { title: out.info?.Title || base, text: out.text || '' };
+  }
+  const raw = fs.readFileSync(p, 'utf-8');
+  return { title: base, text: raw };
+}
+
+export async function parseAndChunk(p: string): Promise<{ title: string; chunks: string[] }>{
+  const { title, text } = await readFileAsText(p);
+  const chunks = chunkText(text);
+  return { title, chunks };
 }

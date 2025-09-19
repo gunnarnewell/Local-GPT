@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
-import got from 'got';
+// using global fetch (Node 20+)
 import { sha256File } from '../shared/sha256';
 import { ModelEntry, ModelManifest } from '../shared/types';
 
@@ -25,10 +25,62 @@ export function getDataDirs() {
   return { appDataDir, dataDir, modelsDir, knowledgeDir, indexDir, logsDir };
 }
 
+function getManifestPaths() {
+  const appPath = app.getAppPath();
+  const { appDataDir } = getDataDirs();
+  const defaultPath = path.join(appPath, 'model_manifest.json');
+  const overridePath = path.join(appDataDir, 'model_manifest.override.json');
+  return { defaultPath, overridePath };
+}
+
 export async function loadManifest(): Promise<ModelManifest> {
-  const manifestPath = path.join(app.getAppPath(), 'model_manifest.json');
-  const raw = fs.readFileSync(manifestPath, 'utf-8');
-  return JSON.parse(raw);
+  const { defaultPath, overridePath } = getManifestPaths();
+  const base: ModelManifest = JSON.parse(fs.readFileSync(defaultPath, 'utf-8'));
+  if (fs.existsSync(overridePath)) {
+    try {
+      const ov: ModelManifest = JSON.parse(fs.readFileSync(overridePath, 'utf-8'));
+      // merge by id (fallback to filename)
+      const map = new Map<string, ModelEntry>();
+      for (const m of base.models) map.set(m.id || m.filename, m);
+      for (const o of ov.models || []) {
+        const key = o.id || o.filename;
+        const curr = map.get(key);
+        if (curr) {
+          map.set(key, { ...curr, ...o });
+        } else {
+          map.set(key, o);
+        }
+      }
+      return { models: Array.from(map.values()) };
+    } catch {}
+  }
+  return base;
+}
+
+function isPlaceholderSha(s: string | undefined): boolean {
+  if (!s) return true;
+  const t = s.trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(t)) return true;
+  if (t.includes('put_real_sha256')) return true;
+  return false;
+}
+
+function saveManifestOverride(partial: Partial<ModelEntry> & { id?: string; filename?: string }) {
+  const { overridePath } = getManifestPaths();
+  let current: ModelManifest = { models: [] };
+  if (fs.existsSync(overridePath)) {
+    try { current = JSON.parse(fs.readFileSync(overridePath, 'utf-8')); } catch {}
+  }
+  const key = (partial.id || partial.filename)!;
+  const idx = current.models.findIndex(m => (m.id || m.filename) === key);
+  if (idx >= 0) {
+    current.models[idx] = { ...current.models[idx], ...partial } as ModelEntry;
+  } else {
+    // Create a minimal entry in overrides (only fields we know)
+    current.models.push(partial as ModelEntry);
+  }
+  fs.mkdirSync(path.dirname(overridePath), { recursive: true });
+  fs.writeFileSync(overridePath, JSON.stringify(current, null, 2));
 }
 
 export async function getDefaultModels(): Promise<ModelEntry[]> {
@@ -47,12 +99,14 @@ export async function ensureModelsPresent(
   for (const m of needed) {
     const dst = path.join(modelsDir, m.filename);
     if (fs.existsSync(dst)) {
-      // verify hash
-      const sum = await sha256File(dst);
-      if (sum.toLowerCase() !== m.sha256.toLowerCase()) {
-        fs.rmSync(dst);
-        missing.push(m);
-        totalBytes += m.size_bytes;
+      // Verify if manifest has a real SHA, otherwise accept and we'll compute + persist later
+      if (!isPlaceholderSha(m.sha256)) {
+        const sum = await sha256File(dst);
+        if (sum.toLowerCase() !== m.sha256.toLowerCase()) {
+          fs.rmSync(dst);
+          missing.push(m);
+          totalBytes += m.size_bytes;
+        }
       }
     } else {
       missing.push(m);
@@ -67,11 +121,18 @@ export async function ensureModelsPresent(
       for (const m of missing) {
         const dst = path.join(modelsDir, m.filename);
         await downloadWithResume(m, dst, onProgress);
-        onProgress?.({ id: m.id, phase: 'hash', message: 'Verifying SHA256', file: dst });
+        const size = fs.statSync(dst).size;
+        onProgress?.({ id: m.id, phase: 'hash', message: 'Computing SHA256', file: dst });
         const sum = await sha256File(dst);
-        if (sum.toLowerCase() !== m.sha256.toLowerCase()) {
-          fs.rmSync(dst);
-          throw new Error(`SHA256 mismatch for ${m.filename}`);
+        // If manifest provides a real SHA, enforce it; otherwise, persist what we found
+        if (!isPlaceholderSha(m.sha256)) {
+          if (sum.toLowerCase() !== m.sha256.toLowerCase()) {
+            fs.rmSync(dst);
+            throw new Error(`SHA256 mismatch for ${m.filename}`);
+          }
+        } else {
+          // Persist computed metadata to user override manifest
+          saveManifestOverride({ id: m.id, filename: m.filename, sha256: sum, size_bytes: size });
         }
         onProgress?.({ id: m.id, phase: 'done', file: dst });
       }
@@ -93,32 +154,76 @@ async function downloadWithResume(m: ModelEntry, dstPath: string, onProgress?: (
 
   onProgress?.({ id: m.id, phase: 'start', receivedBytes: start, totalBytes: m.size_bytes });
 
-  await new Promise<void>((resolve, reject) => {
-    const stream = got.stream(url, {
-      headers: start > 0 ? { Range: `bytes=${start}-` } : {},
-      retry: { limit: 3 },
-      timeout: { request: 60_000 }
-    });
+  // helper: fetch with timeout + retries
+  async function fetchWithRetry(attempts = 4, timeoutMs = 30000): Promise<Response> {
+    let lastErr: any;
+    for (let i = 0; i < attempts; i++) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const headers: Record<string, string> = {
+          'User-Agent': 'Local-Assistant/0.1 (+https://local)'
+        };
+        if (start > 0) headers['Range'] = `bytes=${start}-`;
+        const res = await fetch(url, { headers, signal: ctrl.signal } as any);
+        clearTimeout(t);
+        if (res.ok || res.status === 206) return res;
+        const bodyText = await res.text().catch(() => '');
+        lastErr = new Error(`HTTP ${res.status} ${res.statusText}${bodyText ? `: ${bodyText.slice(0, 200)}` : ''}`);
+      } catch (e: any) {
+        lastErr = e;
+      }
+      // backoff
+      await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
+    }
+    throw new Error(`Fetch failed after retries: ${lastErr?.message || lastErr}`);
+  }
 
-    let received = start;
+  let res: Response;
+  try {
+    res = await fetchWithRetry();
+  } catch (e: any) {
+    writeStream.close();
+    throw new Error(`Model download error for ${m.filename}: ${e?.message || e}`);
+  }
+  if (!res.body) {
+    writeStream.close();
+    throw new Error('No response body from fetch');
+  }
 
-    stream.on('downloadProgress', (p) => {
-      const total = p.total ?? m.size_bytes;
-      received = start + (p.transferred ?? 0);
-      onProgress?.({
-        id: m.id,
-        phase: 'progress',
-        receivedBytes: received,
-        totalBytes: total,
-        percent: total ? received / total : undefined
+  const reader = (res.body as any).getReader ? (res.body as any).getReader() : null;
+  let received = start;
+  const lenHeader = res.headers.get('Content-Length');
+  const total = (lenHeader ? Number(lenHeader) + start : m.size_bytes) || undefined;
+  try {
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          const buf: Buffer = Buffer.isBuffer(value) ? (value as any) : Buffer.from(value);
+          writeStream.write(buf);
+          received += buf.length;
+          onProgress?.({ id: m.id, phase: 'progress', receivedBytes: received, totalBytes: total, percent: total ? received / total : undefined });
+        }
+      }
+    } else {
+      // @ts-ignore Node.js Readable fallback
+      await new Promise<void>((resolve, reject) => {
+        // @ts-ignore
+        (res.body as any).on('data', (chunk: Buffer) => {
+          writeStream.write(chunk);
+          received += chunk.length;
+          onProgress?.({ id: m.id, phase: 'progress', receivedBytes: received, totalBytes: total, percent: total ? received / total : undefined });
+        });
+        // @ts-ignore
+        (res.body as any).on('end', () => resolve());
+        // @ts-ignore
+        (res.body as any).on('error', reject);
       });
-    });
-
-    stream.on('error', reject);
-    stream.pipe(writeStream);
-    writeStream.on('error', reject);
-    writeStream.on('finish', () => resolve());
-  });
-
+    }
+  } finally {
+    writeStream.end();
+  }
   fs.renameSync(tmp, dstPath);
 }

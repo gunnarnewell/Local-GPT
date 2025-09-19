@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 
 export async function embedTexts(texts: string[], port = 11436): Promise<Float32Array[]> {
   const res = await fetch(`http://127.0.0.1:${port}/v1/embeddings`, {
@@ -10,7 +9,7 @@ export async function embedTexts(texts: string[], port = 11436): Promise<Float32
     const t = await res.text();
     throw new Error(`Embeddings error: ${t}`);
   }
-  const data = await res.json();
+  const data = await res.json() as any;
   const arrs = data.data.map((x: any) => Float32Array.from(x.embedding));
   // Normalize to enable dot==cosine
   return arrs.map(norm);

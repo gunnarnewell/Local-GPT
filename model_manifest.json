@@ -1,24 +1,24 @@
 {
   "models": [
     {
-      "id": "chat-20b-q4_k_m",
+      "id": "chat-llama31-8b-q4km",
       "role": "chat",
-      "filename": "gpt-oss-20b-q4_k_m.gguf",
-      "size_bytes": 7423912345,
-      "sha256": "PUT_REAL_SHA256_FOR_YOUR_FILE",
+      "filename": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
+      "size_bytes": 0,
+      "sha256": "PUT_REAL_SHA256",
       "urls": [
-        "https://YOUR_CDN_OR_URL/gpt-oss-20b-q4_k_m.gguf"
+        "https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf?download=1"
       ],
       "default": true
     },
     {
-      "id": "embed-bge-small-q8_0",
+      "id": "embed-nomic-v1.5-q8_0",
       "role": "embedding",
-      "filename": "bge-small-q8_0.gguf",
-      "size_bytes": 123456789,
-      "sha256": "PUT_REAL_SHA256_FOR_YOUR_FILE",
+      "filename": "nomic-embed-text-v1.5.Q8_0.gguf",
+      "size_bytes": 0,
+      "sha256": "PUT_REAL_SHA256",
       "urls": [
-        "https://YOUR_CDN_OR_URL/bge-small-q8_0.gguf"
+        "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.Q8_0.gguf?download=1"
       ],
       "default": true
     }

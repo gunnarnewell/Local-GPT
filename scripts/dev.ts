@@ -4,9 +4,13 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const ensuredPath = process.platform === 'win32'
+  ? `C\\\\Program Files\\\\nodejs;${process.env.PATH || ''}`
+  : process.env.PATH;
+
 const vite = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', '--prefix', 'app/renderer', 'dev'], {
   stdio: 'inherit',
-  env: { ...process.env, NODE_ENV: 'development' }
+  env: { ...process.env, NODE_ENV: 'development', PATH: ensuredPath }
 });
 
 const electron = spawn(
@@ -14,7 +18,7 @@ const electron = spawn(
   ['electron', path.join(__dirname, '../app/dist/main/index.js')],
   {
     stdio: 'inherit',
-    env: { ...process.env, VITE_DEV_SERVER_URL: 'http://localhost:5173' }
+    env: { ...process.env, VITE_DEV_SERVER_URL: 'http://localhost:5173', PATH: ensuredPath }
   }
 );
 

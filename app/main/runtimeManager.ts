@@ -1,7 +1,6 @@
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import fetch from 'node-fetch';
 import { getDataDirs } from './modelManager';
 import { ModelEntry, ServerStatus } from '../shared/types';
 
@@ -23,13 +22,16 @@ async function pickPort(defaultPort: number): Promise<number> {
 
 function getBinaryPath(): string {
   const binName = process.platform === 'win32' ? 'llama-server.exe' : 'llama-server';
-  return path.join(process.resourcesPath || process.cwd(), 'runtime', 'llama', platformFolder(), binName);
+  const base = process.resourcesPath || process.cwd();
+  const withFolder = path.join(base, 'runtime', 'llama', platformFolder(), binName);
+  const flat = path.join(base, 'runtime', 'llama', binName);
+  return fs.existsSync(withFolder) ? withFolder : flat;
 }
 
 async function waitHealthy(port: number, tries = 30, ms = 500): Promise<void> {
   for (let i = 0; i < tries; i++) {
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/v1/models`, { timeout: 1000 as any });
+      const res = await fetch(`http://127.0.0.1:${port}/v1/models`, { timeout: 1000 } as any);
       if (res.ok) return;
     } catch {}
     await new Promise(r => setTimeout(r, ms));
