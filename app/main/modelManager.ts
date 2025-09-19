@@ -107,6 +107,13 @@ export async function ensureModelsPresent(
           missing.push(m);
           totalBytes += m.size_bytes;
         }
+      } else {
+        // If file is already present and manifest is placeholder, compute + persist now
+        try {
+          const size = fs.statSync(dst).size;
+          const sum = await sha256File(dst);
+          saveManifestOverride({ id: m.id, filename: m.filename, sha256: sum, size_bytes: size });
+        } catch {}
       }
     } else {
       missing.push(m);
@@ -179,12 +186,22 @@ async function downloadWithResume(m: ModelEntry, dstPath: string, onProgress?: (
     throw new Error(`Fetch failed after retries: ${lastErr?.message || lastErr}`);
   }
 
-  let res: Response;
-  try {
-    res = await fetchWithRetry();
-  } catch (e: any) {
+  // Try each URL until one succeeds
+  let res: Response | null = null;
+  let lastErr: any;
+  for (const candidate of m.urls) {
+    try {
+      // Update url variable for progress context
+      (url as any) = candidate;
+      res = await fetchWithRetry();
+      break;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  if (!res) {
     writeStream.close();
-    throw new Error(`Model download error for ${m.filename}: ${e?.message || e}`);
+    throw new Error(`All model URLs failed for ${m.filename}: ${lastErr?.message || lastErr}`);
   }
   if (!res.body) {
     writeStream.close();
