@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Open Local Assistant
+Exec=xdg-open http://localhost:8080
+Icon=utilities-terminal
+Categories=Utility;
+StartupNotify=false
