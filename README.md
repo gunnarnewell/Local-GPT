@@ -1,157 +1,35 @@
-# Local Assistant
+# Local Assistant WebUI Kit
 
-# Local Assistant
+This repository packages the documentation, prompt template, helper scripts, and launcher shortcuts needed to distribute {{PRODUCT_NAME}} as an Ollama-based assistant exposed through Open WebUI.
 
-**Offline** desktop app that runs a local LLM + RAG with **no Docker** and **no Ollama**. Ships Electron + React + TypeScript, spawns **two** `llama.cpp` servers (chat & embeddings) bound to `127.0.0.1`.
+## Contents
 
-- Downloads GGUF models on first run (resume + SHA256).
-- Simple RAG: drop docs → chunk → embed locally → cosine search → citations.
-- Single installers: Windows `.exe`, macOS `.dmg`, Linux `.AppImage`.
-- No telemetry. Loopback-only.
+-   `QUICKSTART.md` – concise setup instructions for installing Ollama, baking the {{ASSISTANT_NAME}} model, and running Open WebUI without Docker.
+-   `Modelfile` – template for `ollama create`; replace `{{INSTRUCTIONS_PLACEHOLDER}}` with the full prompt from `prompts/instructions.md` before building the model.
+-   `prompts/` – system instructions template with placeholders for {{COMPANY_NAME}} to customize.
+-   `knowledge/` – placeholder directory where users can drop PDFs/TXTs/CSVs prior to uploading through Open WebUI’s Knowledge feature.
+-   `scripts/` – cross-platform helpers to pull the base model, bake instructions, and launch Open WebUI against the local Ollama service.
+-   `launchers/` – OS-specific shortcuts that open http://localhost:8080 in the default browser.
+-   `CONFIG.example.env` – sample environment variables for default Ollama and WebUI endpoints.
 
-## Project Layout
+## Usage Workflow
 
-local-assistant/
-app/
-main/ # Electron main (TS)
-preload/
-renderer/ # React UI (TS)
-shared/
-runtime/
-llama/win/llama-server.exe
-llama/mac/llama-server
-llama/linux/llama-server
-assets/prompts/instructions.md
-data/ # created on first run: models/, knowledge/, index/, logs/
-scripts/
-model_manifest.json
-electron-builder.yml
-LICENSES/
-README.md
+1.  Read and follow `QUICKSTART.md` to install prerequisites, customize the Modelfile, and create the {{ASSISTANT_NAME}} model from {{MODEL_TAG}}.
+2.  Update placeholders (`{{PRODUCT_NAME}}`, `{{ASSISTANT_NAME}}`, `{{CONTACT_EMAIL}}`, etc.) across the prompt and documentation before sharing with end users.
+3.  Use the helper scripts (`create_model_*`, `start_webui_*`) for a streamlined setup on macOS, Linux, or Windows.
+4.  Share the launchers with end users so they can open the hosted WebUI quickly once the server is running.
 
-markdown
-Copy code
+## Network & Public Access
 
-## Prereqs
+-   **Local network sharing:** run Open WebUI with `--host 0.0.0.0` and a fixed port (e.g., 8080), ensure the firewall allows inbound traffic, then have teammates visit `http://<your-hostname>:8080`. Keep Ollama bound to `127.0.0.1` so only the UI is network-exposed, and require authentication inside WebUI.
+-   **Public exposure:** front the WebUI with a reverse proxy (Nginx, Caddy, or cloud load balancer) that terminates TLS, enforces authentication, and optionally adds rate limits. If hosting externally, lock down the Ollama endpoint with a VPN or IP allow-list to prevent unauthorized access. Avoid publishing the raw Ollama port to the internet.
 
-- Node 20+
-- (Packaging) Xcode CLT for macOS, build-essentials for Linux, MSVC Build Tools for Windows.
-- **Binaries:** Replace `runtime/llama/*/llama-server*` with your `llama.cpp` `llama-server` build (CPU recommended for widest compatibility). Make executable (`chmod +x`) on mac/linux.
+## Customization & Maintenance
 
-Build notes for CUDA/Metal/CPU in `scripts/sign_and_notarize_notes.md`.
+-   Tailor `prompts/instructions.md` whenever {{COMPANY_NAME}} updates operating policies, then rebuild the model via the create script.
+-   Mirror edits to `QUICKSTART.md` or this README whenever processes change.
+-   Keep binaries, build artifacts, and large files out of version control; rely on the scripts and instructions instead of packaging compiled assets.
 
-## Models
+## Support & Licensing
 
-Edit `model_manifest.json` with your URLs and SHA256 sums. Example entries:
-- Chat: `gpt-oss-20b-q4_k_m.gguf` (or any GGUF chat model)
-- Embedding: `bge-small` or `nomic-embed` GGUF
-
-> First run prompts to download into `data/models/`.
-
-## Dev Run
-
-```bash
-# install deps
-npm install
-# build main & preload once for dev runner
-npm run build:main && npm run build:preload
-# start vite renderer + electron
-npm run dev
-Renderer at Vite dev server.
-
-Electron loads renderer via VITE_DEV_SERVER_URL.
-
-Build Installers
-bash
-Copy code
-npm run dist
-Outputs to release/:
-
-Windows: Local Assistant-Setup-<version>.exe
-
-macOS: Local Assistant-<version>.dmg
-
-Linux: Local Assistant-<version>.AppImage
-
-Estimated Installer Sizes (without models)
-Windows: ~90–110 MB
-
-macOS: ~85–100 MB
-
-Linux: ~80–95 MB
-
-(Varies with Electron version and dependency tree.)
-
-First-Run Flow
-Welcome prompt asks to download models (~X GB) — resume + SHA256 verified.
-
-Starts two llama.cpp servers:
-
-Chat: 127.0.0.1:11435
-
-Embeddings: 127.0.0.1:11436
-
-Chat UI opens.
-
-If a server crashes, open Settings → Open data folder then check data/logs/.
-
-RAG How-To
-Go to Knowledge → Add Documents (TXT/MD/PDF).
-
-Ask a question in Chat with Use Knowledge enabled.
-
-See citations under the answer.
-
-Security & Privacy
-Servers bind to 127.0.0.1 only.
-
-No telemetry. (No outgoing requests besides local servers.)
-
-CSP in renderer blocks remote origins.
-
-Swapping Models
-Update model_manifest.json (URL + SHA256). Delete old file in data/models/ to force re-download.
-
-Tests
-bash
-Copy code
-npm test
-Covers:
-
-SHA256 helper
-
-Downloader resume logic (local range server)
-
-Vector math (cosine)
-
-Known Issues
-For large corpora (>5k chunks), retrieval is in-memory; consider paging or ANN later.
-
-GPU toggles are not exposed in UI by default; app ships CPU-first for compatibility.
-
-Demo Script
-Launch app; accept model download.
-
-Add a .txt and a .pdf in Knowledge.
-
-In Chat, enable “Use Knowledge”, ask a question; answer should cite both sources.
-
-Licenses
-See About → Licenses and LICENSES/.
-
-markdown
-Copy code
-
----
-
-# How to run & build (quick)
-
-- **Dev:** `npm install && npm run build:main && npm run build:preload && npm run dev`
-- **Build installers:** `npm run dist`
-
-# Platform caveats
-
-- **macOS:** You’ll likely need signing + notarization (see `scripts/sign_and_notarize_notes.md`). Unsigned apps show “can’t be opened” Gatekeeper prompts.
-- **Windows:** Without code signing, SmartScreen may warn on first installs.
-- **Linux:** AppImage should run on most mainstream distros; `chmod +x` if needed.
-
+Document licensing separately (e.g., add a `LICENSE` file) and direct customers to {{CONTACT_EMAIL}} for assistance. Update copyright notices with {{YEAR}}.
